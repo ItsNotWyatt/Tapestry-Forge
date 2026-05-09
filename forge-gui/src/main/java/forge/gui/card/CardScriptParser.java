@@ -482,7 +482,7 @@ public final class CardScriptParser {
             "CostsPhyrexianMana", "IsRemembered",
             "IsImprinted", "hasManaAbility",
             "hasNonManaActivatedAbility", "NoAbilities", "HasCounters",
-            "ChosenType", "IsNotChosenType", "IsCommander",
+            "ChosenType", "IsNotChosenType", "IsCommander", "IsMantra",
             "IsRenowned");
     private static final Set<String> VALID_EXCLUSIVE_STARTSWITH = ImmutableSortedSet.of(
             "named", "OwnedBy", "ControlledBy",

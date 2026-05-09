@@ -2330,6 +2330,25 @@ public class AbilityUtils {
             return doXMath(player.getTotalCommanderCast(), expr, c, ctb);
         }
 
+        // Tapestry custom — Count$Linked.Mantra.<property> resolves to a property of
+        // the activating player's designated Mantra (singleton in their command zone).
+        // Used by the bypass ability SVar:X:Count$Linked.Mantra.ManaValue so X auto-fills
+        // to the Mantra's mana value. Returns 0 if no Mantra is designated.
+        if (sq[0].equals("Linked") && sq.length >= 2 && sq[1].equals("Mantra")) {
+            Card mantra = null;
+            for (Card cz : player.getCardsIn(ZoneType.Command)) {
+                if (cz.isRealMantra()) { mantra = cz; break; }
+            }
+            if (mantra == null) {
+                return doXMath(0, expr, c, ctb);
+            }
+            final String prop = sq.length >= 3 ? sq[2] : "ManaValue";
+            if (prop.equals("ManaValue") || prop.equals("CMC")) {
+                return doXMath(mantra.getCMC(), expr, c, ctb);
+            }
+            return doXMath(0, expr, c, ctb);
+        }
+
         if (sq[0].contains("LifeYouLostThisTurn")) {
             return doXMath(player.getLifeLostThisTurn(), expr, c, ctb);
         }
