@@ -354,6 +354,12 @@ public final class CardRules implements ICardCharacteristics {
                 || b.hasKeyword("Choose a Background") && canBeBackground()) {
             return true; // commander with background
         }
+        // Tapestry custom — Choose a Mantra (mirrors Background pattern
+        // but with an instant/sorcery Mantra subtype as the "second").
+        if (hasKeyword("Choose a Mantra") && b.canBeMantra()
+                || b.hasKeyword("Choose a Mantra") && canBeMantra()) {
+            return true; // commander with mantra
+        }
         if (isDoctor() && b.hasKeyword("Doctor's companion")
                 || hasKeyword("Doctor's companion") && b.isDoctor()) {
             return true; // Doctor Who partner commander
@@ -365,15 +371,39 @@ public final class CardRules implements ICardCharacteristics {
         if (canBeBackground()) {
             return true;
         }
+        // Tapestry custom — Mantras are valid command-zone "second"
+        // pieces. They're instants/sorceries, not creatures, so they
+        // don't pass the canBeCommander check below. Short-circuit
+        // before that gate.
+        if (canBeMantra()) {
+            return true;
+        }
         if (!canBeCommander()) {
             return false;
         }
         return hasKeyword("Partner") || !this.partnerWith.isEmpty() || !this.partnerType.isEmpty() ||
-                hasKeyword("Choose a Background") || hasKeyword("Doctor's companion") || isDoctor();
+                hasKeyword("Choose a Background") || hasKeyword("Choose a Mantra") || hasKeyword("Doctor's companion") || isDoctor();
     }
 
     public boolean canBeBackground() {
         return mainPart.getType().hasSubtype("Background");
+    }
+
+    /**
+     * Tapestry custom — Mantra is an instant/sorcery subtype designating
+     * a spell that lives in the command zone alongside a legendary
+     * creature with the "Choose a Mantra" keyword. Mirrors canBeBackground
+     * but for a noncreature spell type. See
+     * docs/TAPESTRY_MANTRA_PATCHES.md.
+     */
+    public boolean canBeMantra() {
+        CardType type = mainPart.getType();
+        if (!type.hasSubtype("Mantra")) {
+            return false;
+        }
+        // Must be an instant or sorcery — Mantras are spells, not
+        // permanents. Any other type with the Mantra subtype is malformed.
+        return type.isInstant() || type.isSorcery();
     }
 
     public boolean isDoctor() {

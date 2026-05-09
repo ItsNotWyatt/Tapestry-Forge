@@ -2591,7 +2591,7 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
                         || keyword.equals("Battle cry") || keyword.equals("Devoid")
                         || keyword.equals("Daybound") || keyword.equals("Nightbound")
                         || keyword.equals("Increment")
-                        || keyword.equals("Choose a Background") || keyword.equals("Compleated")
+                        || keyword.equals("Choose a Background") || keyword.equals("Choose a Mantra") || keyword.equals("Compleated")
                         || keyword.equals("Space sculptor") || keyword.equals("Doctor's companion")
                         || keyword.equals("Start your engines") || keyword.startsWith("Modular")
                         || keyword.startsWith("Bloodthirst") || keyword.startsWith("Dredge")

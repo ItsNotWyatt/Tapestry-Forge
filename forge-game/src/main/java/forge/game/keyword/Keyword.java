@@ -34,6 +34,10 @@ public enum Keyword {
     CHAMPION("Champion", KeywordWithType.class, false, "When this permanent enters, sacrifice it unless you exile another %s you control. When this permanent leaves the battlefield, return the exiled card to the battlefield under its owner's control."),
     CHANGELING("Changeling", SimpleKeyword.class, true, "This card is every creature type."),
     CHOOSE_A_BACKGROUND("Choose a Background", Partner.class, true, "You can have a Background as a second commander."),
+    // Tapestry custom — Mantra spells in the command zone, mirrors
+    // Choose a Background but with an instant/sorcery subtype rather
+    // than a creature subtype. See docs/TAPESTRY_MANTRA_PATCHES.md.
+    CHOOSE_A_MANTRA("Choose a Mantra", Partner.class, true, "When building your deck, choose one Mantra card and put it in your command zone alongside this legendary. You may cast it from there. It costs {2} more each time you've cast it from your command zone this game. Either this permanent or your Mantra may be cast first."),
     CIPHER("Cipher", SimpleKeyword.class, true, "Then you may exile this spell card encoded on a creature you control. Whenever that creature deals combat damage to a player, its controller may cast a copy of the encoded card without paying its mana cost."),
     COMPANION("Companion", Companion.class, true, "Reveal your companion from outside the game if your deck meets the companion restriction."),
     COMPLEATED("Compleated", Compleated.class, true, "This planeswalker enters with two fewer loyalty counters for each Phyrexian mana symbol life was paid for."),
