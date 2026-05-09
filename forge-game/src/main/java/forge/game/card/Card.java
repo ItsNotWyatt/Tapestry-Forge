@@ -5611,6 +5611,12 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
 
     public final boolean isRoom()       { return getType().hasSubtype("Room"); }
 
+    // Tapestry custom — isMantra() is the pure subtype check (matches the
+    // IsMantra valid-card predicate); isRealMantra() also requires the
+    // commander flag, i.e. "this is a designated Mantra in command zone".
+    public final boolean isMantra()     { return getType().hasSubtype("Mantra"); }
+    public final boolean isRealMantra() { return isRealCommander() && isMantra(); }
+
     /** {@inheritDoc} */
     @Override
     public final int compareTo(final Card that) {
