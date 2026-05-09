@@ -1,0 +1,9 @@
+Name:Elia, Sworn Archivist
+ManaCost:2 W
+Types:Legendary Creature Human Cleric
+PT:1/3
+K:Vigilance
+K:Choose a Mantra
+S:Mode$ ReduceCost | ValidCard$ Card.YouOwn+IsMantra+inZoneCommand | Type$ Spell | Amount$ 2 | Description$ Your Mantra costs {2} less to cast from your command zone.
+A:AB$ Play | Cost$ X T | Valid$ Card.YouOwn+IsMantra | ValidZone$ Command | WithoutManaCost$ True | Controller$ You | ActivationLimit$ 1 | SVar:X:Count$Linked.Mantra.ManaValue | SpellDescription$ Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
+Oracle:Vigilance\nChoose a Mantra (You can have two commanders if the second is a card with the subtype Mantra. Either may be cast first.)\nYour Mantra costs {2} less to cast from your command zone.\n{X}, {T}: Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.

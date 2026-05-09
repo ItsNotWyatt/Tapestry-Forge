@@ -1,0 +1,8 @@
+Name:Bind and Prosper
+ManaCost:3
+Types:Sorcery Mantra
+A:SP$ Token | TokenAmount$ X | TokenScript$ c_a_treasure_sac | TokenOwner$ You | SpellDescription$ Create X Treasure tokens, where X is the number of times you've cast this spell this game plus 1.
+T:Mode$ SpellCast | ValidCard$ Card.Self | Static$ True | Execute$ TrigIntensify | TriggerDescription$ Intensity bookkeeping (silent): bumps before the spell resolves, so X reflects (prior casts + 1) — i.e. countered casts still count.
+SVar:TrigIntensify:DB$ Intensify
+SVar:X:Count$Intensity
+Oracle:Create X Treasure tokens, where X is the number of times you've cast this spell this game plus 1.

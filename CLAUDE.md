@@ -44,62 +44,72 @@ all flow through the existing Partner machinery.
 
 ## What still needs Java work
 
-These three pieces are NOT yet implemented in this fork. They're the
-runtime command-zone behavior — the deck builds correctly today but
-playing the deck would surface gaps. Sequencing matters: each item
-builds on the prior.
+The deck-build piece landed in commit `3f24d8109b`. **Items #1 and #2
+below also already work** via Forge's existing commander gate — see
+"Why #1 and #2 are free" below. Only items #3 and #4 still need
+new logic. Sequencing: #3 and #4 are independent, so either can land
+first.
 
-### 1. Mantra return-to-command-zone after resolution
+### 1. Mantra return-to-command-zone after resolution — works for free
 
-When a Mantra resolves, it currently goes to graveyard (default for
-instants/sorceries). It needs to return to the command zone so it can
-be cast again.
+When a Mantra resolves, the existing commander gate at
+[`GameAction.stateBasedAction_Commander`](forge-game/src/main/java/forge/game/GameAction.java)
+(line ~1840) sees the card in graveyard, sees `isRealCommander()`
+returns true (because `Player.addCommander` was called for it during
+game setup), prompts the owner via `confirmAction`, and on confirm
+moves the card back to the command zone.
 
-**Likely files:**
-- `forge-game/src/main/java/forge/game/zone/MagicStack.java` —
-  resolution → zone-of-rest decision
-- `forge-game/src/main/java/forge/game/spellability/SpellAbility.java`
-  — post-resolution destination
+A Mantra-flavored prompt-text override is in place so the player sees
+"return your Mantra to the command zone?" instead of the generic
+commander prompt.
 
-**Pattern to mirror:** Forge already does this for commanders (cast
-from command zone, return to command zone instead of graveyard). The
-`Card.isCommander()` check is the gate. We need an equivalent
-`Card.isMantra()` (true when card has Mantra subtype AND is in command
-zone) plumbed through the same gate.
+**Test:** Add a commander with `K:Choose a Mantra` and a Mantra spell
+to the `[Commander]` section of a `.dck` file. Start a commander
+game. Cast the Mantra from the command zone. After it resolves, the
+prompt should appear; confirm → Mantra returns to command zone.
 
-**Test:** Cast a Mantra from command zone, confirm it returns to
-command zone after resolving (or being countered).
+### 2. {2}-per-cast Mantra tax — works for free
 
-### 2. {2}-per-cast Mantra tax
-
-Forge tracks commander tax via `Card.commanderTax` (or similar — find
-the actual field). For Mantras, we need a parallel counter that's
-incremented per command-zone Mantra cast. Not a shared counter — each
-Mantra in a deck gets its own tax tally.
-
-**Likely files:**
-- `forge-game/src/main/java/forge/game/card/Card.java` — add
-  `mantraCastCount` field, getter, increment-on-cast hook
-- `forge-game/src/main/java/forge/game/cost/CostAdjustment.java` —
-  apply the +{2} cost when calculating cast cost
-- `forge-game/src/main/java/forge/game/spellability/SpellAbility.java`
-  — invoke the increment on cast resolution (NOT on bypass — see #3)
+The existing commander tax at
+[`CostAdjustment.java:57`](forge-game/src/main/java/forge/game/cost/CostAdjustment.java:57)
+applies `{2}` per prior cast for any card with `isCommander()` cast
+from the command zone, using `Player.commanderCast` as the per-card
+counter and `Player.incCommanderCast` to bump it on cast. Mantras
+inherit this automatically because they're registered as commanders.
 
 **Test:** Cast a Mantra from command zone twice. First cast pays X.
-Second cast pays X+2.
+Second cast pays X+2. Third cast pays X+4.
+
+### Why #1 and #2 are free
+
+Backgrounds (the precedent for Choose a Mantra) don't have an
+`isBackground` flag — they piggyback on `isCommander`. Once a
+Background or Mantra is placed in `DeckSection.Commander`,
+`Player.addCommander` calls `setCommander(true)` on it
+([Player.java:2780](forge-game/src/main/java/forge/game/player/Player.java:2780)),
+and every commander-gate check downstream applies. The earlier
+CLAUDE.md guess that this needed engine work was based on file-name
+guesses (`MagicStack.java`, `SpellAbility.java`) that turned out not
+to be where the logic lives.
+
+Two derived accessors are now in
+[`Card.java`](forge-game/src/main/java/forge/game/card/Card.java) —
+`isMantra()` (subtype-only, for the `IsMantra` valid-card filter) and
+`isRealMantra()` (subtype + `isRealCommander`, for Mantra-specific
+internal logic in #3 and #4 below).
 
 ### 3. `Linked.Mantra.<property>` SVar reference
 
-The shared bypass ability `{X}, {T}: Cast your Mantra without paying
-its mana cost` needs `X` to resolve to the linked Mantra's mana value.
-Currently the ability would treat X as a user-paid value (defaulting
-to 0). The fix is a new SVar count expression.
+`Count$Linked.Mantra.ManaValue` (and `.CMC` as an alias) resolves to
+the mana value of the activating player's designated Mantra in command
+zone, or 0 if no Mantra is designated. Used by the bypass ability
+`SVar:X:Count$Linked.Mantra.ManaValue` so X auto-fills.
 
-**Likely file:**
-- `forge-game/src/main/java/forge/game/CardFactoryUtil.java` (or
-  wherever `xCount` lives) — extend to recognize
-  `Count$Linked.Mantra.ManaValue` and resolve to the activating
-  player's designated Mantra in command zone
+**Implementation:** branch added to `AbilityUtils.xCount()` at
+[`AbilityUtils.java`](forge-game/src/main/java/forge/game/ability/AbilityUtils.java)
+right after the `TotalCommanderCastFromCommandZone` branch. Iterates
+the activator's command zone, finds the unique card matching
+`isRealMantra()`, and reads the requested property.
 
 **Test:** Activate the bypass with X=0. Cost should auto-resolve to
 the Mantra's mana value. Activating again same turn should fail
@@ -107,16 +117,27 @@ the Mantra's mana value. Activating again same turn should fail
 
 ### 4. Bypass ability skips Mantra tax
 
-The bypass `{X}, {T}: cast Mantra free` should NOT increment the
-Mantra cast counter (the design doc explicitly says no tax accrues
-from the bypass). Whatever increments the counter in #2 needs to be
-gated on "is this a command-zone cast paying its actual cost" not
-"any cast of the Mantra."
+The bypass `{X}, {T}: cast Mantra free` no longer bumps the per-card
+commander-cast counter, so subsequent normal casts of the Mantra are
+taxed only for prior *paid* casts.
+
+**Implementation:** two paired gates with the same condition
+`!(host.isRealMantra() && sa.isCastFromPlayEffect())`:
+- [`MagicStack.java:397`](forge-game/src/main/java/forge/game/zone/MagicStack.java:397) —
+  skips `incCommanderCast` so the bypass cast doesn't bump the counter
+- [`CostAdjustment.java:57`](forge-game/src/main/java/forge/game/cost/CostAdjustment.java:57) —
+  skips adding the {2}×N tax cost so the bypass is *actually* free
+  (otherwise `WithoutManaCost$` would strip the base mana cost but the
+  tax would still apply, contradicting "bypasses the cost entirely")
+
+The bypass uses `AB$ Play` under the hood, which routes through
+`AbilityUtils.collectSpells…` and sets `setCastFromPlayEffect(true)`
+on the spawned cast SA. Non-Mantra commanders are unaffected by both
+gates.
 
 **Test:** Cast Mantra from command zone twice (tax goes 0 → 2 → 4).
-Then activate bypass — Mantra is cast (free). Cast Mantra from
-command zone again — tax should be 4, not 6. (Bypass didn't
-increment.)
+Then activate the bypass — Mantra is cast for free. Cast Mantra from
+command zone again — tax should be 4, not 6.
 
 ## Test cards
 
@@ -132,9 +153,15 @@ PT:1/3
 K:Vigilance
 K:Choose a Mantra
 S:Mode$ ReduceCost | ValidCard$ Card.YouOwn+IsMantra+inZoneCommand | Type$ Spell | Amount$ 2 | Description$ Your Mantra costs {2} less to cast from your command zone.
-A:AB$ Cast | Cost$ X T | ValidCard$ Card.YouOwn+IsMantra+inZoneCommand | NoManaCost$ True | ActivationLimit$ 1 | SVar:X:Count$Linked.Mantra.ManaValue | SpellDescription$ Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
+A:AB$ Play | Cost$ X T | Valid$ Card.YouOwn+IsMantra | ValidZone$ Command | WithoutManaCost$ True | Controller$ You | ActivationLimit$ 1 | SVar:X:Count$Linked.Mantra.ManaValue | SpellDescription$ Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
 Oracle:Vigilance\nChoose a Mantra\nYour Mantra costs {2} less to cast from your command zone.\n{X}, {T}: Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
 ```
+
+> **Note:** the bypass uses `AB$ Play | … | WithoutManaCost$ True`
+> — there's no `AB$ Cast` API in Forge. `AB$ Play` with
+> `WithoutManaCost$ True` is the precedent (see `geode_golem.txt`,
+> `yue_the_moon_spirit.txt`). Composer T's emitter must produce
+> `AB$ Play`, not `AB$ Cast`.
 
 ```
 Name:Bind and Prosper
@@ -207,16 +234,32 @@ files to study before extending Mantra behavior:
 
 ## Sequencing recommendation
 
-1. ✅ Deck-build validation (done in this session)
-2. **Next: command-zone return-after-resolution (#1 above)** — smallest
-   discrete piece, biggest user-facing payoff (lets you actually keep
-   playing your Mantra deck)
-3. Mantra cast tax (#2) — blocked on #1
-4. SVar Linked.Mantra (#3) — independent of #1/#2, can land in parallel
-5. Bypass-skips-tax (#4) — depends on #2
-6. Run all 5 commanders + 8 Mantras as a smoke test
-7. Tag a `tapestry-mantra-v1` build and point Composer T's
-   forgeInstallPath at it
+1. ✅ Deck-build validation
+2. ✅ Command-zone return-after-resolution (#1) — covered by existing
+   commander gate; Mantra-flavored prompt added
+3. ✅ Mantra cast tax (#2) — covered by existing commander tax
+4. ✅ SVar `Linked.Mantra.<property>` (#3) — branch in
+   `AbilityUtils.xCount`
+5. ✅ Bypass-skips-tax (#4) — gated `incCommanderCast` for Mantra +
+   `isCastFromPlayEffect`
+6. **Next: build verify + smoke test.** Run
+   `mvn -pl forge-game,forge-core -am compile -DskipTests`. If it
+   compiles, drop the Elia + Bind and Prosper test cards into
+   `res/cardsfolder/custom/e/` and `res/cardsfolder/custom/b/` and
+   work the test checklist in `docs/TAPESTRY_MANTRA_PATCHES.md`.
+7. Author the remaining 3 commanders + 7 Mantras via Composer T.
+8. Tag a `tapestry-mantra-v1` build and point Composer T's
+   `forgeInstallPath` at it.
 
-Estimated effort for #1–#4: 1–2 days for someone familiar with Forge's
-internals; 2–3 days starting cold.
+**Composer T side:** today the `mech_mantra_bypass` shell only emits
+the Oracle text via the fallback `AB$ Effect | SpellDescription$ …`
+path — i.e. the printed bypass doesn't actually function in Forge,
+the user has to hand-author the A: line. Composer T can ship a real
+emitter for it later that produces:
+
+```
+A:AB$ Play | Cost$ X T | Valid$ Card.YouOwn+IsMantra | ValidZone$ Command | WithoutManaCost$ True | Controller$ You | ActivationLimit$ 1 | SVar:X:Count$Linked.Mantra.ManaValue
+```
+
+There is no `AB$ Cast` API in Forge — `AB$ Play` is the precedent
+(see `geode_golem.txt`, `yue_the_moon_spirit.txt`).
