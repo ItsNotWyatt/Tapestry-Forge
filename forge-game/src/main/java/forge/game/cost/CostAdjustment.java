@@ -54,7 +54,11 @@ public class CostAdjustment {
             }
 
             // Commander Tax there
-            if (host.isCommander() && host.getCastFrom() != null && ZoneType.Command.equals(host.getCastFrom().getZoneType())) {
+            // Tapestry custom — pair-gated with MagicStack.java:397 so the Mantra bypass
+            // (Play effect on a Mantra commander) is entirely free: no tax counter bump,
+            // and no tax cost added here.
+            if (host.isCommander() && host.getCastFrom() != null && ZoneType.Command.equals(host.getCastFrom().getZoneType())
+                    && !(host.isRealMantra() && sa.isCastFromPlayEffect())) {
                 int n = activator.getCommanderCast(host) * 2;
                 if (n > 0) {
                     result.add(new Cost(ManaCost.get(n), false));

@@ -395,7 +395,9 @@ public class MagicStack /* extends MyObservable */ implements Iterable<SpellAbil
             // Run SpellCast triggers
             if (sp.isSpell()) {
                 if (source.isCommander() && source.getCastFrom() != null && ZoneType.Command == source.getCastFrom().getZoneType()
-                        && source.getOwner().equals(activator)) {
+                        && source.getOwner().equals(activator)
+                        // Tapestry custom — Mantras cast via a Play effect (the commander's bypass ability) accrue no tax.
+                        && !(source.isRealMantra() && sp.isCastFromPlayEffect())) {
                     activator.incCommanderCast(source);
                 }
                 game.getTriggerHandler().runTrigger(TriggerType.SpellCast, runParams, true);
