@@ -222,3 +222,111 @@ the riskiest part (touches game state validation in several places).
 5. Merge to fork main, tag a Tapestry-flavored Forge build
 6. Rev Composer T's `forgeInstallPath` setting picker to recommend
    the Tapestry build
+
+---
+
+## Build & run (added post-implementation)
+
+This section was added after `tapestry-mantra-v1.4` shipped, so the
+next session can rebuild from source without rediscovery. The fork
+itself is at `ItsNotWyatt/Tapestry-Forge`; this worktree is
+`claude/sweet-wilson-cf3d70`.
+
+### Toolchain
+
+- **Maven 3.8.1+** required (per `pom.xml` enforcer rule). Tested
+  with 3.9.9 installed at
+  `%USERPROFILE%\.local\maven\apache-maven-3.9.9\` (manual zip
+  install — winget didn't have `Apache.Maven` on this machine).
+- **Java 17 LTS preferred.** Java 26 compiles fine but Forge's
+  reflection-heavy startup is happier on 17.
+
+### Compile-only check (~30s incremental, ~3min cold)
+
+```bash
+mvn -pl forge-core,forge-game,forge-gui -am compile -DskipTests
+```
+
+If any of the patched files fail to compile, this catches it without
+spending build time on unrelated modules.
+
+### Unit tests (forge-game / forge-core)
+
+```bash
+mvn -pl forge-core,forge-game -am test
+```
+
+Note: Forge's test coverage in these modules is minimal —
+`AbilityKeyTest` and `ManaCostBeingPaidTest` are the only
+test classes, and both are pure data-self-consistency. The Mantra
+patches aren't covered by Java unit tests at all; smoke testing in
+the desktop GUI (see below) is the actual verification path.
+
+### Full distribution build (~5-10min cold, ~2-3min incremental)
+
+```bash
+mvn -pl forge-gui-desktop -am package -DskipTests
+```
+
+Produces:
+```
+forge-gui-desktop/target/forge-gui-desktop-<version>-jar-with-dependencies.jar
+```
+
+### Launch
+
+**IMPORTANT:** launch from `forge-gui/` so Forge's CWD-relative
+`res/skins/`, `res/lists/`, `res/cardsfolder/` paths resolve. Launching
+from the worktree root crashes early (FSkin can't find
+`res/skins/default/bg_splash.png`), and Forge's
+`UncaughtExceptionHandler` swallows the stack trace via
+`BugReporter`'s localizer-dependent static init.
+
+```bash
+cd forge-gui && java -jar ../forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar
+```
+
+### Smoke-test cards
+
+Two test cards are staged at:
+- `docs/test_cards/elia_sworn_archivist.txt` — Choose-a-Mantra
+  commander with the bypass and ReduceCost static
+- `docs/test_cards/bind_and_prosper.txt` — colorless Mantra spell
+  with intensity-scaling Treasure tokens
+
+To exercise them at runtime **without** rebuilding, copy to
+`%APPDATA%\Forge\custom\cards\<letter>\` (loaded as user customs at
+startup). To bake into a release JAR, copy to
+`forge-gui/res/cardsfolder/<letter>/` and `mvn package`.
+
+### JAR-build verification
+
+After any source change, verify the JAR you actually ship contains
+the change. Maven incremental builds and stale `target/` artifacts
+caused us to ship a JAR built BEFORE a fix during development — the
+release notes claimed v1.1 but the bytecode was pre-v1.1. To check:
+
+```bash
+# Confirm JAR mtime is after the relevant commit
+ls -la forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar
+git log -1 --format="%h %ai" <commit-of-interest>
+
+# Disassemble a touched method and verify the change is in bytecode
+jar xf forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar forge/card/CardRules.class
+javap -c -p forge/card/CardRules.class | sed -n '/canBeCommander/,/public/p'
+```
+
+### Releasing
+
+```bash
+git tag -a tapestry-mantra-vN -m "..."
+git push origin claude/sweet-wilson-cf3d70 tapestry-mantra-vN
+gh release create tapestry-mantra-vN \
+  --title "Tapestry Mantra vN" \
+  --notes "..." \
+  forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar
+```
+
+Composer T users update by setting `tapestry.forgeInstallPath` to
+the worktree root; the `exportToForge` flow writes cards into
+`<forgePath>/res/cardsfolder/<letter>/`.
