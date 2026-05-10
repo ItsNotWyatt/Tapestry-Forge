@@ -349,6 +349,7 @@ Adventure
 Arcane
 Chorus
 Lesson
+Mantra
 Omen
 Trap
 [EnchantmentTypes]
