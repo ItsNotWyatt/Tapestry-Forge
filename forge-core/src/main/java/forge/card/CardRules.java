@@ -320,7 +320,11 @@ public final class CardRules implements ICardCharacteristics {
     }
 
     public boolean canBeCommander() {
-        if (mainPart.getOracleText().contains("can be your commander") || canBeBackground()) {
+        // Tapestry custom — Mantras (instant/sorcery + subtype Mantra) are
+        // pool-eligible commanders so they show up in the deck editor's
+        // commander pool when paired with a Choose-a-Mantra commander.
+        // Mirrors the canBeBackground escape hatch on the line below.
+        if (mainPart.getOracleText().contains("can be your commander") || canBeBackground() || canBeMantra()) {
             return true;
         }
         CardType type = mainPart.getType();
