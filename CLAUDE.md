@@ -21,34 +21,50 @@ Composer T emits Forge `.txt` cards, this fork accepts them.
 
 ## What's already done in this fork
 
-**Tapestry "Choose a Mantra" keyword — minimum viable patches landed by
-the Composer T session on May 8, 2026.** The keyword is registered, the
-deck-builder validation is wired, and the pairing rules accept a Mantra
-spell as the second piece alongside a Choose-a-Mantra commander. Files
-touched:
+**Tapestry "Choose a Mantra" — fully wired and smoke-tested as of
+`tapestry-mantra-v1.4` (May 10, 2026).** All four engine items from
+`docs/TAPESTRY_MANTRA_PATCHES.md` are landed; both test cards (Elia,
+Bind and Prosper) play correctly end-to-end including pairing,
+return-to-CZ, tax, bypass auto-X, ReduceCost discount, and bypass-
+skips-tax.
 
-- `forge-game/src/main/java/forge/game/keyword/Keyword.java` —
-  added `CHOOSE_A_MANTRA` enum entry mapping to `Partner.class`
-- `forge-game/src/main/java/forge/game/card/Card.java` — added
-  `Choose a Mantra` to the empty-render keyword list (line ~2594)
-- `forge-core/src/main/java/forge/card/CardRules.java` —
-  added `canBeMantra()` method, extended `canBePartnerCommander()` to
-  treat Mantra subtype as a valid command-zone partner, extended
-  `canBePartnerCommanders(b)` to allow commander+Mantra pairings
+The work spans seven commits on `claude/sweet-wilson-cf3d70`:
 
-**Net effect:** a deck containing a commander with `K:Choose a Mantra`
-and a single instant/sorcery with subtype `Mantra` should now pass
-deck validation when the Commander format check runs. Color identity
-union, singleton enforcement, and the `Either-may-be-cast-first` rule
-all flow through the existing Partner machinery.
+```
+2a418e22d3 Tapestry: fix Elia bypass SVar:X scoping + use wasCastFromCommand
+acd3d010cc Tapestry: register Mantra in [SpellTypes] so the subtype survives load
+e19bd1f5ea Tapestry: surface Mantras in deck-editor commander pool (fix for v1)
+008ebcc9ec Tapestry: docs + smoke-test card fixtures for Mantra patches
+8ef1afd076 Tapestry: bypass-cast Mantra accrues no commander tax (counter + cost)
+7e151388fe Tapestry: Count$Linked.Mantra.<property> SVar + IsMantra valid-card predicate
+69fefd0386 Tapestry: Mantra accessors + Mantra-flavored command-zone-return prompt
+3f24d8109b Tapestry: register Choose a Mantra keyword + deck-validation pairing
+```
 
-## What still needs Java work
+Plus the v1.0 deck-build piece. Files touched in aggregate:
 
-The deck-build piece landed in commit `3f24d8109b`. **Items #1 and #2
-below also already work** via Forge's existing commander gate — see
-"Why #1 and #2 are free" below. Only items #3 and #4 still need
-new logic. Sequencing: #3 and #4 are independent, so either can land
-first.
+- `forge-game/.../keyword/Keyword.java` — `CHOOSE_A_MANTRA` enum
+- `forge-game/.../card/Card.java` — `isMantra()`, `isRealMantra()`,
+  empty-render keyword list entry
+- `forge-game/.../card/CardProperty.java` — `IsMantra` valid-card
+  predicate
+- `forge-game/.../GameAction.java` — Mantra-flavored prompt
+- `forge-game/.../ability/AbilityUtils.java` — `Linked.Mantra.<prop>`
+  SVar branch
+- `forge-game/.../zone/MagicStack.java` — bypass tax counter gate
+- `forge-game/.../cost/CostAdjustment.java` — bypass tax cost gate
+- `forge-core/.../card/CardRules.java` — `canBeMantra()`, partner
+  pairing rule, `canBeCommander` accepts Mantras
+- `forge-gui/.../gui/card/CardScriptParser.java` — `IsMantra` in
+  valid-property allowlist
+- `forge-gui/res/lists/TypeLists.txt` — `Mantra` registered in
+  `[SpellTypes]` so the subtype survives `sanisfySubtypes`
+
+## How each engine item is implemented
+
+All four items below are landed and smoke-tested. This section
+records what's wired, where, and why — useful for upstream PRs or
+maintenance against future Forge changes.
 
 ### 1. Mantra return-to-command-zone after resolution — works for free
 
@@ -141,9 +157,12 @@ command zone again — tax should be 4, not 6.
 
 ## Test cards
 
-Once #1–#4 above land, paste these `.txt` files into
-`<forge-install>/res/cardsfolder/custom/e/` and
-`<forge-install>/res/cardsfolder/custom/b/`:
+Smoke-tested working as of `tapestry-mantra-v1.4`. The canonical
+fixtures live at `docs/test_cards/elia_sworn_archivist.txt` and
+`docs/test_cards/bind_and_prosper.txt`. To exercise them at runtime,
+copy to `%APPDATA%\Forge\custom\cards\<letter>\` (loaded at startup,
+no JAR rebuild needed). For inclusion in a release JAR, copy to
+`forge-gui/res/cardsfolder/<letter>/` and `mvn package`.
 
 ```
 Name:Elia, Sworn Archivist
@@ -152,27 +171,46 @@ Types:Legendary Creature Human Cleric
 PT:1/3
 K:Vigilance
 K:Choose a Mantra
-S:Mode$ ReduceCost | ValidCard$ Card.YouOwn+IsMantra+inZoneCommand | Type$ Spell | Amount$ 2 | Description$ Your Mantra costs {2} less to cast from your command zone.
-A:AB$ Play | Cost$ X T | Valid$ Card.YouOwn+IsMantra | ValidZone$ Command | WithoutManaCost$ True | Controller$ You | ActivationLimit$ 1 | SVar:X:Count$Linked.Mantra.ManaValue | SpellDescription$ Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
+S:Mode$ ReduceCost | ValidCard$ Card.YouOwn+IsMantra+wasCastFromCommand | Type$ Spell | Amount$ 2 | Description$ Your Mantra costs {2} less to cast from your command zone.
+A:AB$ Play | Cost$ T | RaiseCost$ X | Valid$ Card.YouOwn+IsMantra | ValidZone$ Command | WithoutManaCost$ True | Controller$ You | ActivationLimit$ 1 | SpellDescription$ Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
+SVar:X:Count$Linked.Mantra.ManaValue
 Oracle:Vigilance\nChoose a Mantra\nYour Mantra costs {2} less to cast from your command zone.\n{X}, {T}: Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
 ```
 
-> **Note:** the bypass uses `AB$ Play | … | WithoutManaCost$ True`
-> — there's no `AB$ Cast` API in Forge. `AB$ Play` with
-> `WithoutManaCost$ True` is the precedent (see `geode_golem.txt`,
-> `yue_the_moon_spirit.txt`). Composer T's emitter must produce
-> `AB$ Play`, not `AB$ Cast`.
+> **Three Forge-script gotchas the smoke test exposed:**
+>
+> 1. **No `AB$ Cast` API.** Use `AB$ Play | … | WithoutManaCost$ True`.
+>    Precedent: `geode_golem.txt`, `yue_the_moon_spirit.txt`.
+>
+> 2. **SVars must be on their own line.** Inline `| SVar:X:…` inside
+>    an A: ability is parsed as a literal parameter named "SVar:X"
+>    and never registers as an SVar. So `RaiseCost$ X` would resolve
+>    to 0 and the activation would be free. Always write
+>    `SVar:X:Count$…` on its own line below the A: line.
+>    Precedent: `loreseekers_stone.txt`.
+>
+> 3. **`inZoneCommand` doesn't fire on cast-from-CZ statics.** By the
+>    time `CostAdjustment.adjust` runs, `MagicStack.addAndUnfreeze`
+>    has already moved the spell to the stack, so `inZoneCommand`
+>    is false. Use `wasCastFromCommand` instead — checks
+>    `card.getCastFrom()` which is set before cost adjustment.
 
 ```
 Name:Bind and Prosper
 ManaCost:3
 Types:Sorcery Mantra
 A:SP$ Token | TokenAmount$ X | TokenScript$ c_a_treasure_sac | TokenOwner$ You | SpellDescription$ Create X Treasure tokens, where X is the number of times you've cast this spell this game plus 1.
-SVar:X:Number$1/Plus.PlayerCounters.IntensityCount
+T:Mode$ SpellCast | ValidCard$ Card.Self | Static$ True | Execute$ TrigIntensify | TriggerDescription$ Intensity bookkeeping (silent): bumps before the spell resolves, so X reflects (prior casts + 1).
+SVar:TrigIntensify:DB$ Intensify
+SVar:X:Count$Intensity
 Oracle:Create X Treasure tokens, where X is the number of times you've cast this spell this game plus 1.
 ```
 
-## Build / test commands
+> Bind uses `Static$ True` SpellCast trigger so countered casts still
+> bump intensity (matches Oracle wording "number of times you've
+> **cast** this spell"). Precedent: `geths_summons.txt`.
+
+## Build / launch commands
 
 ```bash
 # Full clean build (5–10 min on first run, ~2 min thereafter)
@@ -181,8 +219,29 @@ mvn clean package -DskipTests
 # Run unit tests
 mvn test -pl forge-game,forge-core
 
-# Run the desktop GUI for manual testing
-java -jar forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar
+# Run the desktop GUI — IMPORTANT: launch from forge-gui/ so the
+# CWD-relative res/skins/, res/lists/, res/cardsfolder/ paths resolve.
+# Launching from the worktree root crashes early (FSkin can't find
+# bg_splash.png), and Forge's UncaughtExceptionHandler swallows the
+# stack trace via BugReporter's localizer-dependent static init.
+cd forge-gui && java -jar ../forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar
+```
+
+## JAR build verification
+
+After any source change, verify the JAR you ship actually contains
+the change. Maven incremental builds and stale `target/` artifacts
+caused us to ship a JAR built BEFORE a fix in this session — the
+release notes claimed v1.1 but the bytecode was pre-v1.1. To check:
+
+```bash
+# Confirm the JAR's mtime is after the relevant commit
+ls -la forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar
+git log -1 --format="%h %ai" <commit-of-interest>
+
+# For a specific method, disassemble and confirm the change is in bytecode
+jar xf forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar forge/card/CardRules.class
+javap -c -p forge/card/CardRules.class | sed -n '/canBeCommander/,/public/p'
 ```
 
 ## Composer T integration
@@ -204,6 +263,24 @@ When you change the SVar grammar in this fork (e.g. add
 `Linked.Mantra.ManaValue`), update Composer T's
 `src/services/forge/build-forge.js` to emit the matching SVar in
 generated cards.
+
+**Composer T emitter checklist for any new card:**
+
+- SVars on their own lines below A:/T:/S: lines, NOT inline (`| SVar:X:…`
+  inside an ability is parsed as a literal parameter and never registers).
+- Activated abilities that "cost X mana where X is computed" use
+  `Cost$ T | RaiseCost$ X` plus `SVar:X:Count$…` on its own line —
+  NOT `Cost$ X T` (player-prompts) or `Cost$ X T | SVar:X:…` inline
+  (silent free).
+- Filters that need "the spell was cast from the command zone" use
+  `wasCastFromCommand`, NOT `inZoneCommand`. `inZoneCommand` checks
+  the card's current zone, but at cost-adjustment time the spell has
+  already moved to the stack.
+- Bypass-style cast effects use `AB$ Play | … | WithoutManaCost$ True`,
+  NOT `AB$ Cast` (no such API).
+- New spell subtypes (like `Mantra`) must be registered in
+  `forge-gui/res/lists/TypeLists.txt` `[SpellTypes]` section, or
+  `CardType.sanisfySubtypes` will silently strip them at card load.
 
 ## Style conventions
 
@@ -232,34 +309,36 @@ files to study before extending Mantra behavior:
 - `forge-core/src/main/java/forge/card/CardRulesPredicates.java` —
   predicates used by deck builder to filter card lists
 
-## Sequencing recommendation
+## Sequencing — done
 
-1. ✅ Deck-build validation
-2. ✅ Command-zone return-after-resolution (#1) — covered by existing
-   commander gate; Mantra-flavored prompt added
-3. ✅ Mantra cast tax (#2) — covered by existing commander tax
+1. ✅ Deck-build validation (commit `3f24d8109b`)
+2. ✅ Command-zone return-after-resolution (#1) — existing commander
+   gate + Mantra-flavored prompt
+3. ✅ Mantra cast tax (#2) — existing commander tax
 4. ✅ SVar `Linked.Mantra.<property>` (#3) — branch in
    `AbilityUtils.xCount`
-5. ✅ Bypass-skips-tax (#4) — gated `incCommanderCast` for Mantra +
-   `isCastFromPlayEffect`
-6. **Next: build verify + smoke test.** Run
-   `mvn -pl forge-game,forge-core -am compile -DskipTests`. If it
-   compiles, drop the Elia + Bind and Prosper test cards into
-   `res/cardsfolder/custom/e/` and `res/cardsfolder/custom/b/` and
-   work the test checklist in `docs/TAPESTRY_MANTRA_PATCHES.md`.
-7. Author the remaining 3 commanders + 7 Mantras via Composer T.
-8. Tag a `tapestry-mantra-v1` build and point Composer T's
-   `forgeInstallPath` at it.
+5. ✅ Bypass-skips-tax (#4) — paired gates in `MagicStack.incCommanderCast`
+   and `CostAdjustment.adjust`
+6. ✅ Build verify + smoke test — Maven 3.9.9 + Java 17 (Java 26
+   works at compile but Forge runtime is happier on 17 LTS), launched
+   from `forge-gui/`, walked the 11-step checklist with Elia + Bind
+   and Prosper. Released as `tapestry-mantra-v1.4` on the fork.
+7. **Next:** author the remaining 3 commanders + 7 Mantras via
+   Composer T. They go through the same `[Commander]` registration
+   for the legendary creatures and `Types:Sorcery Mantra` /
+   `Types:Instant Mantra` for the Mantra spells.
 
 **Composer T side:** today the `mech_mantra_bypass` shell only emits
 the Oracle text via the fallback `AB$ Effect | SpellDescription$ …`
 path — i.e. the printed bypass doesn't actually function in Forge,
-the user has to hand-author the A: line. Composer T can ship a real
-emitter for it later that produces:
+the user has to hand-author the A: line. The working form (verified
+via the Elia smoke test) is:
 
 ```
-A:AB$ Play | Cost$ X T | Valid$ Card.YouOwn+IsMantra | ValidZone$ Command | WithoutManaCost$ True | Controller$ You | ActivationLimit$ 1 | SVar:X:Count$Linked.Mantra.ManaValue
+A:AB$ Play | Cost$ T | RaiseCost$ X | Valid$ Card.YouOwn+IsMantra | ValidZone$ Command | WithoutManaCost$ True | Controller$ You | ActivationLimit$ 1 | SpellDescription$ Cast your Mantra from your command zone without paying its mana cost. X is the mana value of your Mantra. Activate only once each turn.
+SVar:X:Count$Linked.Mantra.ManaValue
 ```
 
-There is no `AB$ Cast` API in Forge — `AB$ Play` is the precedent
-(see `geode_golem.txt`, `yue_the_moon_spirit.txt`).
+Note: `Cost$ T | RaiseCost$ X` (NOT `Cost$ X T`), and `SVar:X:…`
+is on its own line below the A: line (NOT inline as `| SVar:X:…`).
+See "Composer T emitter checklist" above for the full set of gotchas.
